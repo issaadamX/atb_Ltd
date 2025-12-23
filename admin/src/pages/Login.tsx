@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '../components/ui';
-import { Input } from '../components/ui/Input';
-import { useToast } from '../hooks/use-toast';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui';
 import { Lock, User } from 'lucide-react';
 
-export const AdminLogin = () => {
+export const Login = () => {
   const [credentials, setCredentials] = useState({ username: '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -16,7 +14,7 @@ export const AdminLogin = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/admin/login', {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials),
@@ -26,24 +24,12 @@ export const AdminLogin = () => {
 
       if (response.ok) {
         localStorage.setItem('adminToken', data.token);
-        toast({
-          title: 'Connexion réussie',
-          description: 'Bienvenue dans le panneau d\'administration.',
-        });
-        navigate('/admin/dashboard');
+        navigate('/');
       } else {
-        toast({
-          title: 'Erreur de connexion',
-          description: data.message || 'Identifiants incorrects.',
-          variant: 'destructive',
-        });
+        alert(data.message || 'Invalid credentials');
       }
     } catch (error) {
-      toast({
-        title: 'Erreur',
-        description: 'Impossible de se connecter au serveur.',
-        variant: 'destructive',
-      });
+      alert('Login failed');
     }
 
     setIsLoading(false);
@@ -57,17 +43,17 @@ export const AdminLogin = () => {
             <Lock className="h-6 w-6 text-blue-600" />
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Connexion Admin
+            Admin Login
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Accédez au panneau d'administration ATB Ltd
+            ATB Ltd Admin Panel
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nom d'utilisateur
+                Username
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -77,7 +63,7 @@ export const AdminLogin = () => {
                   type="text"
                   required
                   value={credentials.username}
-                  onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCredentials({ ...credentials, username: e.target.value })}
                   className="pl-10"
                   placeholder="admin"
                 />
@@ -85,7 +71,7 @@ export const AdminLogin = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Mot de passe
+                Password
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -105,17 +91,15 @@ export const AdminLogin = () => {
 
           <Button
             type="submit"
-            variant="accent"
-            size="lg"
             className="w-full"
             disabled={isLoading}
           >
-            {isLoading ? 'Connexion...' : 'Se connecter'}
+            {isLoading ? 'Logging in...' : 'Login'}
           </Button>
 
           <div className="text-center">
             <p className="text-sm text-gray-600">
-              Identifiants par défaut: admin / admin123
+              Default: admin / admin123
             </p>
           </div>
         </form>
