@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
+import { appointmentAPI } from '../api/appointment.api';
+import { projectsAPI } from '../api/projects.api';
+import { servicesAPI } from '../api/services.api';
+import { testimonialsAPI } from '../api/testimonials.api';
 import {
   Calendar,
   Building,
@@ -67,7 +71,7 @@ export const Dashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem('adminToken');
+    const token = localStorage.getItem('token');
     if (!token) {
       navigate('/login');
       return;
@@ -80,17 +84,8 @@ export const Dashboard = () => {
 
   const fetchAppointments = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:5000/api/appointments', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAppointments(data);
-      } else {
-        throw new Error('Failed to fetch appointments');
-      }
+      const data = await appointmentAPI.getAllAppointments();
+      setAppointments(data);
     } catch (error) {
       console.error('Error fetching appointments:', error);
     } finally {
@@ -100,21 +95,8 @@ export const Dashboard = () => {
 
   const updateAppointmentStatus = async (id: number, status: string) => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`http://localhost:5000/api/appointments/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status }),
-      });
-
-      if (response.ok) {
-        fetchAppointments();
-      } else {
-        throw new Error('Failed to update status');
-      }
+      await appointmentAPI.updateAppointmentStatus(id, status);
+      fetchAppointments();
     } catch (error) {
       console.error('Error updating appointment status:', error);
     }
@@ -122,13 +104,8 @@ export const Dashboard = () => {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/projects');
-      if (response.ok) {
-        const data = await response.json();
-        setProjects(data);
-      } else {
-        throw new Error('Failed to fetch projects');
-      }
+      const data = await projectsAPI.getAllProjects();
+      setProjects(data);
     } catch (error) {
       console.error('Error fetching projects:', error);
     }
@@ -136,13 +113,8 @@ export const Dashboard = () => {
 
   const fetchServices = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/services');
-      if (response.ok) {
-        const data = await response.json();
-        setServices(data);
-      } else {
-        throw new Error('Failed to fetch services');
-      }
+      const data = await servicesAPI.getAllServices();
+      setServices(data);
     } catch (error) {
       console.error('Error fetching services:', error);
     }
@@ -150,13 +122,8 @@ export const Dashboard = () => {
 
   const fetchTestimonials = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/testimonials');
-      if (response.ok) {
-        const data = await response.json();
-        setTestimonials(data);
-      } else {
-        throw new Error('Failed to fetch testimonials');
-      }
+      const data = await testimonialsAPI.getAllTestimonials();
+      setTestimonials(data);
     } catch (error) {
       console.error('Error fetching testimonials:', error);
     }
