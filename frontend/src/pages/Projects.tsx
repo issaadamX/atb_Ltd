@@ -10,8 +10,8 @@ interface Project {
   title: string;
   type: string;
   description: string;
-  image: string;
-  year: string;
+  images?: string[];
+  year: number;
   location: string;
 }
 
@@ -118,7 +118,7 @@ const Projects = () => {
               {filteredProjects.map((project) => (
                 <div key={project.id} className="bg-white rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow">
                   <LazyImage
-                    src={project.image}
+                    src={project.images && project.images[0] ? project.images[0] : '/assets/project-placeholder.jpg'}
                     alt={project.title}
                     className="w-full h-48 object-cover"
                   />

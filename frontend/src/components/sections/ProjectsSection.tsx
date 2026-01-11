@@ -11,8 +11,8 @@ interface Project {
   title: string;
   type: string;
   description: string;
-  image: string;
-  year: string;
+  images?: string[];
+  year: number;
   location: string;
 }
 
@@ -143,7 +143,7 @@ export const ProjectsSection = () => {
                 {/* Image */}
                 <div className="aspect-[4/3] overflow-hidden">
                   <LazyImage
-                    src={project.image}
+                    src={project.images && project.images[0] ? project.images[0] : '/assets/project-placeholder.jpg'}
                     alt={project.title}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
@@ -232,7 +232,7 @@ export const ProjectsSection = () => {
                     <X className="w-5 h-5" aria-hidden="true" />
                   </button>
                   <LazyImage
-                    src={selectedProject.image}
+                    src={selectedProject.images && selectedProject.images[0] ? selectedProject.images[0] : '/assets/project-placeholder.jpg'}
                     alt={selectedProject.title}
                     className="w-full h-64 object-cover rounded-t-2xl"
                   />
