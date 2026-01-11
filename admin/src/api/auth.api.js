@@ -21,7 +21,7 @@ export const authAPI = {
     const response = await fetch(`${API_BASE_URL}/auth/logout`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
       },
     });
 
@@ -35,7 +35,7 @@ export const authAPI = {
   getProfile: async () => {
     const response = await fetch(`${API_BASE_URL}/auth/profile`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
       },
     });
 

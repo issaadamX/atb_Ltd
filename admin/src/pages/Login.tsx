@@ -21,10 +21,14 @@ export const Login = () => {
       });
 
       const data = await response.json();
+      console.log('Login response:', data);
 
       if (response.ok) {
-        localStorage.setItem('adminToken', data.token);
-        navigate('/');
+        // Check if token is in data.data.token or data.token
+        const token = data.data?.token || data.token;
+        console.log('Token:', token);
+        localStorage.setItem('adminToken', token);
+        window.location.href = '/';
       } else {
         alert(data.message || 'Invalid credentials');
       }

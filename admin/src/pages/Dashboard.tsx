@@ -1,414 +1,356 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '../components/ui/Button';
 import { appointmentAPI } from '../api/appointment.api';
+import { dashboardAPI } from '../api/dashboard.api';
 import { projectsAPI } from '../api/projects.api';
-import { servicesAPI } from '../api/services.api';
-import { testimonialsAPI } from '../api/testimonials.api';
-import {
-  Calendar,
-  Building,
-  Users,
-  MessageSquare,
-  LogOut,
-  Plus,
-  Eye,
-  Edit,
-  Trash2,
-  X,
-  Save,
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { 
+  Building2, 
+  Calendar, 
+  Clock, 
+  MessageSquare, 
+  CheckCircle, 
+  RotateCcw,
+  TrendingUp
 } from 'lucide-react';
 
 interface Appointment {
   id: number;
-  name: string;
+  fullName: string;
   email: string;
-  phone?: string;
+  phone: string;
   service: string;
-  message?: string;
-  status: string;
-  created_at: string;
+  message: string;
+  status: 'pending' | 'accepted' | 'declined' | 'postponed';
+  createdAt: string;
 }
 
-interface Project {
-  id: number;
-  title: string;
-  type: string;
-  description: string;
-  image: string;
-  year: number;
-  location: string;
-  created_at: string;
+interface DashboardStats {
+  projects: number;
+  services: number;
+  testimonials: number;
+  appointments: {
+    total: number;
+    pending: number;
+    accepted: number;
+    declined: number;
+    postponed: number;
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+  };
+  pendingAppointments: number;
 }
 
-interface Service {
-  id: number;
-  title: string;
-  description: string;
-  features: string[];
-  icon: string;
-  created_at: string;
-}
-
-interface Testimonial {
-  id: number;
-  name: string;
-  role: string;
-  content: string;
-  rating: number;
-  type: string;
-  video_url?: string;
-  created_at: string;
-}
-
-export const Dashboard = () => {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('appointments');
+const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('');
+  const [adminMessage, setAdminMessage] = useState('');
+  const [showDeclineModal, setShowDeclineModal] = useState(false);
+  const [showPostponeModal, setShowPostponeModal] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [declineReason, setDeclineReason] = useState('');
+  const [newDate, setNewDate] = useState('');
+  const [newTime, setNewTime] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-    fetchAppointments();
-    fetchProjects();
-    fetchServices();
-    fetchTestimonials();
-  }, [navigate]);
+    fetchDashboardData();
+  }, []);
 
-  const fetchAppointments = async () => {
+  const fetchDashboardData = async () => {
     try {
-      const data = await appointmentAPI.getAllAppointments();
-      setAppointments(data);
+      setLoading(true);
+      const [appointmentsRes, statsRes] = await Promise.all([
+        appointmentAPI.getAllAppointments(),
+        dashboardAPI.getStats()
+      ]);
+
+      if (appointmentsRes.success) {
+        setAppointments(appointmentsRes.data.appointments || appointmentsRes.data);
+      }
+      if (statsRes.success) {
+        setStats(statsRes.data);
+      }
     } catch (error) {
-      console.error('Error fetching appointments:', error);
+      console.error('Failed to fetch dashboard data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const updateAppointmentStatus = async (id: number, status: string) => {
+  const handleAccept = async () => {
+    if (!selectedAppointment) return;
+
     try {
-      await appointmentAPI.updateAppointmentStatus(id, status);
-      fetchAppointments();
+      setActionLoading(selectedAppointment.id);
+      const response = await appointmentAPI.acceptAppointment(selectedAppointment.id, {
+        scheduledDate,
+        scheduledTime,
+        message: adminMessage
+      });
+      if (response.success) {
+        setAppointments(prev =>
+          prev.map(apt =>
+            apt.id === selectedAppointment.id ? { ...apt, status: 'accepted' } : apt
+          )
+        );
+        setShowAcceptModal(false);
+        setSelectedAppointment(null);
+        setScheduledDate('');
+        setScheduledTime('');
+        setAdminMessage('');
+        alert('Rendez-vous accepté et email envoyé!');
+      }
     } catch (error) {
-      console.error('Error updating appointment status:', error);
+      console.error('Failed to accept appointment:', error);
+      alert('Échec de l\'acceptation du rendez-vous');
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const fetchProjects = async () => {
+  const handleDecline = async () => {
+    if (!selectedAppointment || !declineReason.trim()) return;
+
     try {
-      const data = await projectsAPI.getAllProjects();
-      setProjects(data);
+      setActionLoading(selectedAppointment.id);
+      const response = await appointmentAPI.declineAppointment(selectedAppointment.id, declineReason);
+      if (response.success) {
+        setAppointments(prev =>
+          prev.map(apt =>
+            apt.id === selectedAppointment.id ? { ...apt, status: 'declined' } : apt
+          )
+        );
+        setShowDeclineModal(false);
+        setSelectedAppointment(null);
+        setDeclineReason('');
+        alert('Appointment declined successfully!');
+      }
     } catch (error) {
-      console.error('Error fetching projects:', error);
+      console.error('Failed to decline appointment:', error);
+      alert('Failed to decline appointment');
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const fetchServices = async () => {
-    try {
-      const data = await servicesAPI.getAllServices();
-      setServices(data);
-    } catch (error) {
-      console.error('Error fetching services:', error);
-    }
-  };
+  const handlePostpone = async () => {
+    if (!selectedAppointment || !newDate || !newTime) return;
 
-  const fetchTestimonials = async () => {
     try {
-      const data = await testimonialsAPI.getAllTestimonials();
-      setTestimonials(data);
+      setActionLoading(selectedAppointment.id);
+      const response = await appointmentAPI.postponeAppointment(selectedAppointment.id, newDate, newTime);
+      if (response.success) {
+        setAppointments(prev =>
+          prev.map(apt =>
+            apt.id === selectedAppointment.id ? { ...apt, status: 'postponed' } : apt
+          )
+        );
+        setShowPostponeModal(false);
+        setSelectedAppointment(null);
+        setNewDate('');
+        setNewTime('');
+        alert('Appointment postponed successfully!');
+      }
     } catch (error) {
-      console.error('Error fetching testimonials:', error);
+      console.error('Failed to postpone appointment:', error);
+      alert('Failed to postpone appointment');
+    } finally {
+      setActionLoading(null);
     }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('adminToken');
-    navigate('/login');
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'confirmed': return 'bg-green-100 text-green-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'pending': return 'bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 border border-yellow-300';
+      case 'accepted': return 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border border-green-300';
+      case 'declined': return 'bg-gradient-to-r from-red-100 to-red-200 text-red-800 border border-red-300';
+      case 'postponed': return 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border border-blue-300';
+      default: return 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 border border-gray-300';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'pending': return '⏳ En attente';
+      case 'accepted': return '✓ Accepté';
+      case 'declined': return '✕ Refusé';
+      case 'postponed': return '📅 Reporté';
+      default: return status;
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <h1 className="text-2xl font-bold text-gray-900">ATB Ltd Admin Panel</h1>
-            <Button onClick={handleLogout} variant="outline" size="sm">
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </Button>
+    <div className="p-6 bg-gray-100 min-h-screen">
+      {/* Welcome Section */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+          Bon retour, Admin
+        </h1>
+        <p className="text-gray-600">
+          Voici ce qui se passe avec vos projets aujourd'hui.
+        </p>
+      </div>
+
+      {/* Stats Cards */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Total Properties */}
+          <div className="bg-white rounded-lg p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-600">Total Propriétés</h3>
+              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                <Building2 className="h-6 w-6 text-gray-600" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-gray-900">{stats.projects}</div>
+          </div>
+
+          {/* Total Appointments */}
+          <div className="bg-white rounded-lg p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-600">Total Rendez-vous</h3>
+              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <Calendar className="h-6 w-6 text-orange-600" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-gray-900">{stats.appointments.total}</div>
+          </div>
+
+          {/* Pending Appointments */}
+          <div className="bg-white rounded-lg p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-600">En Attente</h3>
+              <h3 className="text-sm font-medium text-gray-600">Rendez-vous</h3>
+              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <Clock className="h-6 w-6 text-orange-600" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-gray-900">{stats.pendingAppointments}</div>
+          </div>
+
+          {/* New Inquiries */}
+          <div className="bg-white rounded-lg p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-600">Nouvelles Demandes</h3>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <MessageSquare className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-gray-900">2</div>
+          </div>
+
+          {/* Completed Projects */}
+          <div className="bg-white rounded-lg p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-600">Projets Terminés</h3>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-gray-900">3</div>
+            <div className="flex items-center mt-2">
+              <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
+              <span className="text-sm text-green-500 font-medium">12% depuis le mois dernier</span>
+            </div>
+          </div>
+
+          {/* Ongoing Projects */}
+          <div className="bg-white rounded-lg p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-600">Projets En Cours</h3>
+              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <RotateCcw className="h-6 w-6 text-orange-600" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-gray-900">2</div>
           </div>
         </div>
-      </header>
+      )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Navigation Tabs */}
-        <div className="mb-8">
-          <nav className="flex space-x-8">
-            {[
-              { id: 'appointments', label: 'Appointments', icon: Calendar },
-              { id: 'projects', label: 'Projects', icon: Building },
-              { id: 'services', label: 'Services', icon: Users },
-              { id: 'testimonials', label: 'Testimonials', icon: MessageSquare },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center px-1 py-2 border-b-2 font-medium text-sm ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+      {/* Bottom Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Activity */}
+        <div className="bg-white rounded-lg shadow-sm">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Activité Récente</h3>
+          </div>
+          <div className="p-6">
+            <div className="space-y-4">
+              <div className="flex items-start space-x-3">
+                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                <div>
+                  <p className="text-sm text-gray-900">Nouvelle demande de rendez-vous de John Doe</p>
+                  <p className="text-xs text-gray-500">Il y a 2 heures</p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3">
+                <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                <div>
+                  <p className="text-sm text-gray-900">Projet "Villa Moderne" terminé</p>
+                  <p className="text-xs text-gray-500">Il y a 1 jour</p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3">
+                <div className="w-2 h-2 bg-orange-500 rounded-full mt-2"></div>
+                <div>
+                  <p className="text-sm text-gray-900">Nouvelle demande reçue</p>
+                  <p className="text-xs text-gray-500">Il y a 2 jours</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="bg-white rounded-lg shadow-sm">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Actions Rapides</h3>
+          </div>
+          <div className="p-6">
+            <div className="space-y-3">
+              <Button 
+                onClick={() => navigate('/appointments')}
+                className="w-full justify-start bg-blue-600 hover:bg-blue-700 text-white"
               >
-                <tab.icon className="w-5 h-5 mr-2" />
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+                <Calendar className="h-4 w-4 mr-2" />
+                Voir Tous les Rendez-vous
+              </Button>
+              <Button 
+                onClick={() => navigate('/portfolio')}
+                className="w-full justify-start bg-green-600 hover:bg-green-700 text-white"
+              >
+                <Building2 className="h-4 w-4 mr-2" />
+                Gérer les Propriétés
+              </Button>
+              <Button 
+                onClick={() => navigate('/inquiries')}
+                className="w-full justify-start bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                Vérifier les Demandes
+              </Button>
+            </div>
+          </div>
         </div>
-
-        {/* Content */}
-        {activeTab === 'appointments' && (
-          <div className="bg-white shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Manage Appointments ({appointments.length})
-                </h3>
-                <Button size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  New
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                {appointments.map((appointment) => (
-                  <div key={appointment.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <h4 className="text-sm font-medium text-gray-900">{appointment.name}</h4>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(appointment.status)}`}>
-                            {appointment.status === 'pending' ? 'Pending' :
-                             appointment.status === 'confirmed' ? 'Confirmed' : 'Cancelled'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-500 mt-1">{appointment.email}</p>
-                        {appointment.phone && <p className="text-sm text-gray-500">{appointment.phone}</p>}
-                        <p className="text-sm text-gray-700 mt-2"><strong>Service:</strong> {appointment.service}</p>
-                        {appointment.message && <p className="text-sm text-gray-600 mt-1">{appointment.message}</p>}
-                        <p className="text-xs text-gray-400 mt-2">
-                          {new Date(appointment.created_at).toLocaleString('en-US')}
-                        </p>
-                      </div>
-                      <div className="flex space-x-2">
-                        <select
-                          value={appointment.status}
-                          onChange={(e) => updateAppointmentStatus(appointment.id, e.target.value)}
-                          className="text-sm border border-gray-300 rounded px-2 py-1"
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="confirmed">Confirm</option>
-                          <option value="cancelled">Cancel</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {appointments.length === 0 && (
-                  <p className="text-center text-gray-500 py-8">No appointments found.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'projects' && (
-          <div className="bg-white shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Manage Projects ({projects.length})
-                </h3>
-                <Button size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Project
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                {projects.map((project) => (
-                  <div key={project.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <h4 className="text-sm font-medium text-gray-900">{project.title}</h4>
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {project.type}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-500 mt-1">{project.location} - {project.year}</p>
-                        <p className="text-sm text-gray-600 mt-2">{project.description}</p>
-                        <p className="text-xs text-blue-600 mt-1">Image: {project.image}</p>
-                        <p className="text-xs text-gray-400 mt-2">
-                          {new Date(project.created_at).toLocaleString('en-US')}
-                        </p>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button size="sm" variant="outline">
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {projects.length === 0 && (
-                  <p className="text-center text-gray-500 py-8">No projects found.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'services' && (
-          <div className="bg-white shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Manage Services ({services.length})
-                </h3>
-                <Button size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Service
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                {services.map((service) => (
-                  <div key={service.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <h4 className="text-sm font-medium text-gray-900">{service.title}</h4>
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {service.icon}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-2">{service.description}</p>
-                        <div className="mt-2">
-                          <p className="text-xs text-gray-500">Features:</p>
-                          <ul className="list-disc list-inside text-xs text-gray-600 mt-1">
-                            {service.features.map((feature, index) => (
-                              <li key={index}>{feature}</li>
-                            ))}
-                          </ul>
-                        </div>
-                        <p className="text-xs text-gray-400 mt-2">
-                          {new Date(service.created_at).toLocaleString('en-US')}
-                        </p>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button size="sm" variant="outline">
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {services.length === 0 && (
-                  <p className="text-center text-gray-500 py-8">No services found.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'testimonials' && (
-          <div className="bg-white shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Manage Testimonials ({testimonials.length})
-                </h3>
-                <Button size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Testimonial
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                {testimonials.map((testimonial) => (
-                  <div key={testimonial.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <h4 className="text-sm font-medium text-gray-900">{testimonial.name}</h4>
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                            {testimonial.type}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-500 mt-1">{testimonial.role}</p>
-                        <p className="text-sm text-gray-600 mt-2">{testimonial.content}</p>
-                        {testimonial.video_url && (
-                          <p className="text-xs text-blue-600 mt-1">Video: {testimonial.video_url}</p>
-                        )}
-                        <p className="text-xs text-gray-400 mt-2">
-                          {new Date(testimonial.created_at).toLocaleString('en-US')}
-                        </p>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button size="sm" variant="outline">
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {testimonials.length === 0 && (
-                  <p className="text-center text-gray-500 py-8">No testimonials found.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
 };
+
+export default Dashboard;

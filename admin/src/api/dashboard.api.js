@@ -4,7 +4,7 @@ export const dashboardAPI = {
   getStats: async () => {
     const response = await fetch(`${API_BASE_URL}/dashboard/stats`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
       },
     });
 
@@ -18,7 +18,7 @@ export const dashboardAPI = {
   getRecentAppointments: async () => {
     const response = await fetch(`${API_BASE_URL}/dashboard/recent-appointments`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
       },
     });
 
