@@ -1,139 +1,65 @@
-const prisma = require('../config/db');
-const { uploadToCloudinary, deleteFromCloudinary } = require('../services/cloudinary.service');
-const { sendSuccess, sendError } = require('../utils/response');
+const { PrismaClient } = require('@prisma/client');
+const { successResponse, errorResponse } = require('../utils/response');
+
+const prisma = new PrismaClient();
 
 const getProjects = async (req, res) => {
   try {
     const projects = await prisma.project.findMany({
-      orderBy: { createdAt: 'desc' },
+      where: { visibility: 'published' },
+      orderBy: { createdAt: 'desc' }
     });
-
-    sendSuccess(res, 'Projects retrieved successfully', projects);
+    return successResponse(res, projects);
   } catch (error) {
-    console.error('Get projects error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to fetch projects', 500);
   }
 };
 
 const getProject = async (req, res) => {
   try {
-    const { id } = req.params;
-
     const project = await prisma.project.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: parseInt(req.params.id) }
     });
-
     if (!project) {
-      return sendError(res, 404, 'Project not found');
+      return errorResponse(res, 'Project not found', 404);
     }
-
-    sendSuccess(res, 'Project retrieved successfully', project);
+    return successResponse(res, project);
   } catch (error) {
-    console.error('Get project error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to fetch project', 500);
   }
 };
 
 const createProject = async (req, res) => {
   try {
-    const { title, type, description, year, location } = req.body;
-    let imageUrl = null;
-
-    // Handle image upload if provided
-    if (req.file) {
-      const result = await uploadToCloudinary(req.file.buffer, 'projects');
-      imageUrl = result.secure_url;
-    }
-
     const project = await prisma.project.create({
-      data: {
-        title,
-        type,
-        description,
-        image: imageUrl,
-        year: parseInt(year),
-        location,
-      },
+      data: req.body
     });
-
-    sendSuccess(res, 'Project created successfully', project, 201);
+    return successResponse(res, project, 'Project created successfully', 201);
   } catch (error) {
-    console.error('Create project error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to create project', 500);
   }
 };
 
 const updateProject = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { title, type, description, year, location } = req.body;
-    let imageUrl = null;
-
-    const existingProject = await prisma.project.findUnique({
-      where: { id: parseInt(id) },
-    });
-
-    if (!existingProject) {
-      return sendError(res, 404, 'Project not found');
-    }
-
-    // Handle image upload if provided
-    if (req.file) {
-      // Delete old image if exists
-      if (existingProject.image) {
-        const publicId = existingProject.image.split('/').pop().split('.')[0];
-        await deleteFromCloudinary(`projects/${publicId}`);
-      }
-
-      const result = await uploadToCloudinary(req.file.buffer, 'projects');
-      imageUrl = result.secure_url;
-    }
-
     const project = await prisma.project.update({
-      where: { id: parseInt(id) },
-      data: {
-        title,
-        type,
-        description,
-        image: imageUrl || existingProject.image,
-        year: parseInt(year),
-        location,
-      },
+      where: { id: parseInt(req.params.id) },
+      data: req.body
     });
-
-    sendSuccess(res, 'Project updated successfully', project);
+    return successResponse(res, project, 'Project updated successfully');
   } catch (error) {
-    console.error('Update project error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to update project', 500);
   }
 };
 
 const deleteProject = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const existingProject = await prisma.project.findUnique({
-      where: { id: parseInt(id) },
-    });
-
-    if (!existingProject) {
-      return sendError(res, 404, 'Project not found');
-    }
-
-    // Delete image from Cloudinary if exists
-    if (existingProject.image) {
-      const publicId = existingProject.image.split('/').pop().split('.')[0];
-      await deleteFromCloudinary(`projects/${publicId}`);
-    }
-
     await prisma.project.delete({
-      where: { id: parseInt(id) },
+      where: { id: parseInt(req.params.id) }
     });
-
-    sendSuccess(res, 'Project deleted successfully');
+    return successResponse(res, null, 'Project deleted successfully');
   } catch (error) {
-    console.error('Delete project error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to delete project', 500);
   }
 };
 

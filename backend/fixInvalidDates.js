@@ -18,7 +18,7 @@ db.connect((err) => {
 
 // Function to fix invalid updatedAt dates
 const fixInvalidDates = () => {
-  const tables = ['services', 'projects', 'testimonials'];
+  const tables = ['services', 'projects', 'testimonials', 'admins'];
 
   tables.forEach(table => {
     // Update updatedAt where it's invalid (0000-00-00 or similar) to createdAt

@@ -1,112 +1,64 @@
-const prisma = require('../config/db');
-const { sendSuccess, sendError } = require('../utils/response');
+const { PrismaClient } = require('@prisma/client');
+const { successResponse, errorResponse } = require('../utils/response');
+
+const prisma = new PrismaClient();
 
 const getTestimonials = async (req, res) => {
   try {
     const testimonials = await prisma.testimonial.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'desc' }
     });
-
-    sendSuccess(res, 'Testimonials retrieved successfully', testimonials);
+    return successResponse(res, testimonials);
   } catch (error) {
-    console.error('Get testimonials error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to fetch testimonials', 500);
   }
 };
 
 const getTestimonial = async (req, res) => {
   try {
-    const { id } = req.params;
-
     const testimonial = await prisma.testimonial.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: parseInt(req.params.id) }
     });
-
     if (!testimonial) {
-      return sendError(res, 404, 'Testimonial not found');
+      return errorResponse(res, 'Testimonial not found', 404);
     }
-
-    sendSuccess(res, 'Testimonial retrieved successfully', testimonial);
+    return successResponse(res, testimonial);
   } catch (error) {
-    console.error('Get testimonial error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to fetch testimonial', 500);
   }
 };
 
 const createTestimonial = async (req, res) => {
   try {
-    const { name, role, content, rating, type, videoUrl } = req.body;
-
     const testimonial = await prisma.testimonial.create({
-      data: {
-        name,
-        role,
-        content,
-        rating: parseInt(rating),
-        type,
-        videoUrl,
-      },
+      data: req.body
     });
-
-    sendSuccess(res, 'Testimonial created successfully', testimonial, 201);
+    return successResponse(res, testimonial, 'Testimonial created successfully', 201);
   } catch (error) {
-    console.error('Create testimonial error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to create testimonial', 500);
   }
 };
 
 const updateTestimonial = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { name, role, content, rating, type, videoUrl } = req.body;
-
-    const existingTestimonial = await prisma.testimonial.findUnique({
-      where: { id: parseInt(id) },
-    });
-
-    if (!existingTestimonial) {
-      return sendError(res, 404, 'Testimonial not found');
-    }
-
     const testimonial = await prisma.testimonial.update({
-      where: { id: parseInt(id) },
-      data: {
-        name,
-        role,
-        content,
-        rating: parseInt(rating),
-        type,
-        videoUrl,
-      },
+      where: { id: parseInt(req.params.id) },
+      data: req.body
     });
-
-    sendSuccess(res, 'Testimonial updated successfully', testimonial);
+    return successResponse(res, testimonial, 'Testimonial updated successfully');
   } catch (error) {
-    console.error('Update testimonial error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to update testimonial', 500);
   }
 };
 
 const deleteTestimonial = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const existingTestimonial = await prisma.testimonial.findUnique({
-      where: { id: parseInt(id) },
-    });
-
-    if (!existingTestimonial) {
-      return sendError(res, 404, 'Testimonial not found');
-    }
-
     await prisma.testimonial.delete({
-      where: { id: parseInt(id) },
+      where: { id: parseInt(req.params.id) }
     });
-
-    sendSuccess(res, 'Testimonial deleted successfully');
+    return successResponse(res, null, 'Testimonial deleted successfully');
   } catch (error) {
-    console.error('Delete testimonial error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to delete testimonial', 500);
   }
 };
 

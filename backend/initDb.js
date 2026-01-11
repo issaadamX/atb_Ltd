@@ -23,7 +23,9 @@ const createTables = () => {
       id INT AUTO_INCREMENT PRIMARY KEY,
       username VARCHAR(255) UNIQUE NOT NULL,
       password VARCHAR(255) NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      role VARCHAR(255) DEFAULT 'admin',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS bookings (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -88,8 +90,8 @@ const insertDefaultAdmin = () => {
       return;
     }
 
-    const query = 'INSERT IGNORE INTO admins (username, password) VALUES (?, ?)';
-    db.query(query, [defaultUsername, hashedPassword], (err, result) => {
+    const query = 'INSERT IGNORE INTO admins (username, password, role) VALUES (?, ?, ?)';
+    db.query(query, [defaultUsername, hashedPassword, 'admin'], (err, result) => {
       if (err) {
         console.error('Error inserting default admin:', err);
       } else if (result.affectedRows > 0) {

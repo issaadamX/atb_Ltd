@@ -1,108 +1,64 @@
-const prisma = require('../config/db');
-const { sendSuccess, sendError } = require('../utils/response');
+const { PrismaClient } = require('@prisma/client');
+const { successResponse, errorResponse } = require('../utils/response');
+
+const prisma = new PrismaClient();
 
 const getServices = async (req, res) => {
   try {
     const services = await prisma.service.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'desc' }
     });
-
-    sendSuccess(res, 'Services retrieved successfully', services);
+    return successResponse(res, services);
   } catch (error) {
-    console.error('Get services error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to fetch services', 500);
   }
 };
 
 const getService = async (req, res) => {
   try {
-    const { id } = req.params;
-
     const service = await prisma.service.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: parseInt(req.params.id) }
     });
-
     if (!service) {
-      return sendError(res, 404, 'Service not found');
+      return errorResponse(res, 'Service not found', 404);
     }
-
-    sendSuccess(res, 'Service retrieved successfully', service);
+    return successResponse(res, service);
   } catch (error) {
-    console.error('Get service error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to fetch service', 500);
   }
 };
 
 const createService = async (req, res) => {
   try {
-    const { title, description, features, icon } = req.body;
-
     const service = await prisma.service.create({
-      data: {
-        title,
-        description,
-        features: JSON.parse(features || '[]'),
-        icon,
-      },
+      data: req.body
     });
-
-    sendSuccess(res, 'Service created successfully', service, 201);
+    return successResponse(res, service, 'Service created successfully', 201);
   } catch (error) {
-    console.error('Create service error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to create service', 500);
   }
 };
 
 const updateService = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { title, description, features, icon } = req.body;
-
-    const existingService = await prisma.service.findUnique({
-      where: { id: parseInt(id) },
-    });
-
-    if (!existingService) {
-      return sendError(res, 404, 'Service not found');
-    }
-
     const service = await prisma.service.update({
-      where: { id: parseInt(id) },
-      data: {
-        title,
-        description,
-        features: JSON.parse(features || '[]'),
-        icon,
-      },
+      where: { id: parseInt(req.params.id) },
+      data: req.body
     });
-
-    sendSuccess(res, 'Service updated successfully', service);
+    return successResponse(res, service, 'Service updated successfully');
   } catch (error) {
-    console.error('Update service error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to update service', 500);
   }
 };
 
 const deleteService = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const existingService = await prisma.service.findUnique({
-      where: { id: parseInt(id) },
-    });
-
-    if (!existingService) {
-      return sendError(res, 404, 'Service not found');
-    }
-
     await prisma.service.delete({
-      where: { id: parseInt(id) },
+      where: { id: parseInt(req.params.id) }
     });
-
-    sendSuccess(res, 'Service deleted successfully');
+    return successResponse(res, null, 'Service deleted successfully');
   } catch (error) {
-    console.error('Delete service error:', error);
-    sendError(res, 500, 'Server error');
+    return errorResponse(res, 'Failed to delete service', 500);
   }
 };
 

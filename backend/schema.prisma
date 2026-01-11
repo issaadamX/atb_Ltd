@@ -7,13 +7,17 @@ generator client {
 
 datasource db {
   provider = "mysql"
+  url = env("DATABASE_URL")
 }
 
 model AdminUser {
   id        Int      @id @default(autoincrement())
   username  String   @unique
+  email     String   @unique
   password  String
   role      String   @default("admin")
+  lastLogin DateTime?
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -23,11 +27,14 @@ model AdminUser {
 model Project {
   id          Int      @id @default(autoincrement())
   title       String
-  type        String
+  type        String   // house, apartment, commercial, engineering
   description String   @db.Text
-  image       String?
+  images      Json?    // Array of image URLs
   year        Int
   location    String
+  status      String   @default("completed") // completed, ongoing
+  visibility  String   @default("published") // published, draft
+  features    Json?    // area, floors, materials, budget
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -47,15 +54,17 @@ model Service {
 }
 
 model Appointment {
-  id        Int      @id @default(autoincrement())
-  fullName  String
-  email     String
-  phone     String?
-  service   String
-  message   String?  @db.Text
-  status    String   @default("pending")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  fullName    String
+  email       String
+  phone       String?
+  service     String
+  message     String?  @db.Text
+  status      String   @default("pending") // pending, accepted, declined, postponed
+  adminNotes  String?  @db.Text
+  scheduledAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("bookings")
 }
@@ -72,4 +81,66 @@ model Testimonial {
   updatedAt   DateTime @updatedAt
 
   @@map("testimonials")
+}
+
+model Inquiry {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String   @db.Text
+  status    String   @default("new") // new, read, responded
+  response  String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("inquiries")
+}
+
+model AdminProfile {
+  id          Int      @id @default(autoincrement())
+  name        String
+  email       String   @unique
+  phone       String?
+  bio         String?  @db.Text
+  profileImage String?
+  companyLogo String?
+  address     String?
+  workingHours Json?   // {start: "09:00", end: "17:00", days: ["mon", "tue"]}
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("admin_profiles")
+}
+
+model SystemSettings {
+  id                    Int      @id @default(autoincrement())
+  siteName             String   @default("ATB Ltd")
+  siteDescription      String?  @db.Text
+  contactEmail         String?
+  contactPhone         String?
+  address              String?
+  socialLinks          Json?    // {facebook, twitter, linkedin, instagram}
+  bookingEnabled       Boolean  @default(true)
+  maxAppointmentsPerDay Int     @default(5)
+  unavailableDates     Json?    // Array of dates
+  emailNotifications   Boolean  @default(true)
+  smsNotifications     Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  type      String   // appointment, inquiry, system
+  title     String
+  message   String   @db.Text
+  isRead    Boolean  @default(false)
+  relatedId Int?     // ID of related appointment/inquiry
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
 }

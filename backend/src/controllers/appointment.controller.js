@@ -1,255 +1,264 @@
-const prisma = require('../config/db');
-const transporter = require('../config/mail');
-const { sendSuccess, sendError } = require('../utils/response');
+const { PrismaClient } = require('@prisma/client');
+const { successResponse, errorResponse } = require('../utils/response');
+const emailService = require('../services/email.service');
 
-const getAppointments = async (req, res) => {
-  try {
-    const appointments = await prisma.appointment.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
+let prisma;
+try {
+  prisma = new PrismaClient();
+} catch (error) {
+  console.error('Prisma initialization error:', error);
+}
 
-    sendSuccess(res, 'Appointments retrieved successfully', appointments);
-  } catch (error) {
-    console.error('Get appointments error:', error);
-    sendError(res, 500, 'Server error');
-  }
-};
+const appointmentController = {
+  // Get all appointments
+  getAppointments: async (req, res) => {
+    try {
+      const { status, page = 1, limit = 10 } = req.query;
+      const skip = (page - 1) * limit;
 
-const getAppointment = async (req, res) => {
-  try {
-    const { id } = req.params;
+      const where = status ? { status } : {};
 
-    const appointment = await prisma.appointment.findUnique({
-      where: { id: parseInt(id) },
-    });
+      const [appointments, total] = await Promise.all([
+        prisma.appointment.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip: parseInt(skip),
+          take: parseInt(limit),
+        }),
+        prisma.appointment.count({ where })
+      ]);
 
-    if (!appointment) {
-      return sendError(res, 404, 'Appointment not found');
+      return successResponse(res, {
+        appointments,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(total / limit)
+        }
+      });
+    } catch (error) {
+      console.error('Get appointments error:', error);
+      return errorResponse(res, 'Failed to fetch appointments', 500);
     }
+  },
 
-    sendSuccess(res, 'Appointment retrieved successfully', appointment);
-  } catch (error) {
-    console.error('Get appointment error:', error);
-    sendError(res, 500, 'Server error');
-  }
-};
+  // Get appointment by ID
+  getAppointment: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const appointment = await prisma.appointment.findUnique({
+        where: { id: parseInt(id) }
+      });
 
-const createAppointment = async (req, res) => {
-  try {
-    const { fullName, email, phone, service, message } = req.body;
+      if (!appointment) {
+        return errorResponse(res, 'Appointment not found', 404);
+      }
 
-    console.log('Creating appointment for:', { fullName, email, phone, service, message });
+      return successResponse(res, appointment);
+    } catch (error) {
+      console.error('Get appointment error:', error);
+      return errorResponse(res, 'Failed to fetch appointment', 500);
+    }
+  },
 
-    const appointment = await prisma.appointment.create({
-      data: {
+  // Create appointment (from frontend booking form)
+  createAppointment: async (req, res) => {
+    try {
+      console.log('Create appointment request received:', req.body);
+      
+      if (!prisma) {
+        console.log('Prisma client not available');
+        return errorResponse(res, 'Database connection not available', 500);
+      }
+
+      const { fullName, email, phone, service, message } = req.body;
+      
+      console.log('Creating appointment with data:', { fullName, email, phone, service, message });
+
+      const appointment = await prisma.appointment.create({
+        data: {
+          fullName,
+          email,
+          phone,
+          service,
+          message,
+          status: 'pending'
+        }
+      });
+      
+      console.log('Appointment created successfully:', appointment);
+
+      // Send confirmation email
+      const emailResult = await emailService.sendAppointmentConfirmation({
         fullName,
         email,
-        phone,
         service,
-        message,
-        status: 'pending',
-      },
-    });
-
-    console.log('Appointment created:', appointment);
-
-    // Send email notification to admin
-    try {
-      console.log('Sending admin email to:', process.env.ADMIN_EMAIL);
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: process.env.ADMIN_EMAIL,
-        subject: 'New Appointment Request - ATB Ltd',
-        html: `
-          <h2>New Appointment Request</h2>
-          <p><strong>Name:</strong> ${fullName}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
-          <p><strong>Service:</strong> ${service}</p>
-          <p><strong>Message:</strong> ${message || 'No message'}</p>
-          <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
-        `,
+        message
       });
-      console.log('Admin email sent successfully');
-    } catch (emailError) {
-      console.error('Admin email sending error:', emailError);
-      // Don't fail the appointment creation if email fails
-    }
-
-    // Send confirmation email to user
-    try {
-      console.log('Sending user confirmation email to:', email);
-      await transporter.sendMail({
-        from: 'abc.sarl <' + process.env.EMAIL_USER + '>',
-        to: email,
-        subject: 'Confirmation de votre demande de consultation - ABC SARL',
-        html: `
-          <h2>Votre demande de consultation a été reçue</h2>
-          <p>Cher(e) ${fullName},</p>
-          <p>Nous avons bien reçu votre demande de consultation. Vous recevrez bientôt notre réponse.</p>
-          <p><strong>Détails de votre demande :</strong></p>
-          <ul>
-            <li><strong>Nom :</strong> ${fullName}</li>
-            <li><strong>Email :</strong> ${email}</li>
-            <li><strong>Téléphone :</strong> ${phone || 'Non fourni'}</li>
-            <li><strong>Service demandé :</strong> ${service}</li>
-            <li><strong>Message :</strong> ${message || 'Aucun message'}</li>
-            <li><strong>Date de la demande :</strong> ${new Date().toLocaleString()}</li>
-          </ul>
-          <p>Cordialement,<br>ABC SARL</p>
-        `,
-      });
-      console.log('User confirmation email sent successfully');
-    } catch (emailError) {
-      console.error('User confirmation email sending error:', emailError);
-      // Don't fail the appointment creation if email fails
-    }
-
-    sendSuccess(res, 'Appointment created successfully', appointment, 201);
-  } catch (error) {
-    console.error('Create appointment error:', error);
-    sendError(res, 500, 'Server error');
-  }
-};
-
-const updateAppointment = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    const existingAppointment = await prisma.appointment.findUnique({
-      where: { id: parseInt(id) },
-    });
-
-    if (!existingAppointment) {
-      return sendError(res, 404, 'Appointment not found');
-    }
-
-    const appointment = await prisma.appointment.update({
-      where: { id: parseInt(id) },
-      data: { status },
-    });
-
-    // Send email to user based on status
-    try {
-      let subject = '';
-      let html = '';
-
-      switch (status) {
-        case 'accepted':
-          subject = 'Votre demande de consultation a été acceptée - ATB Ltd';
-          html = `
-            <h2>Félicitations ! Votre demande de consultation a été acceptée</h2>
-            <p>Cher(e) ${appointment.fullName},</p>
-            <p>Nous sommes heureux de vous informer que votre demande de consultation pour le service <strong>${appointment.service}</strong> a été <strong>acceptée</strong>.</p>
-            <p><strong>Détails de votre demande :</strong></p>
-            <ul>
-              <li><strong>Nom :</strong> ${appointment.fullName}</li>
-              <li><strong>Email :</strong> ${appointment.email}</li>
-              <li><strong>Téléphone :</strong> ${appointment.phone || 'Non fourni'}</li>
-              <li><strong>Service demandé :</strong> ${appointment.service}</li>
-              <li><strong>Message :</strong> ${appointment.message || 'Aucun message'}</li>
-              <li><strong>Date de la demande :</strong> ${new Date(appointment.createdAt).toLocaleString()}</li>
-            </ul>
-            <p>Notre équipe vous contactera bientôt pour organiser la consultation.</p>
-            <p>Si vous avez des questions, n'hésitez pas à nous contacter.</p>
-            <p>Cordialement,<br>L'équipe ATB Ltd</p>
-          `;
-          break;
-
-        case 'declined':
-          subject = 'Mise à jour de votre demande de consultation - ATB Ltd';
-          html = `
-            <h2>Mise à jour de votre demande de consultation</h2>
-            <p>Cher(e) ${appointment.fullName},</p>
-            <p>Nous vous informons que votre demande de consultation pour le service <strong>${appointment.service}</strong> a été <strong>refusée</strong>.</p>
-            <p><strong>Détails de votre demande :</strong></p>
-            <ul>
-              <li><strong>Nom :</strong> ${appointment.fullName}</li>
-              <li><strong>Email :</strong> ${appointment.email}</li>
-              <li><strong>Téléphone :</strong> ${appointment.phone || 'Non fourni'}</li>
-              <li><strong>Service demandé :</strong> ${appointment.service}</li>
-              <li><strong>Message :</strong> ${appointment.message || 'Aucun message'}</li>
-              <li><strong>Date de la demande :</strong> ${new Date(appointment.createdAt).toLocaleString()}</li>
-            </ul>
-            <p>Nous vous remercions pour votre intérêt. N'hésitez pas à nous contacter pour toute autre demande.</p>
-            <p>Cordialement,<br>L'équipe ATB Ltd</p>
-          `;
-          break;
-
-        case 'postponed':
-          subject = 'Mise à jour de votre demande de consultation - ATB Ltd';
-          html = `
-            <h2>Mise à jour de votre demande de consultation</h2>
-            <p>Cher(e) ${appointment.fullName},</p>
-            <p>Nous vous informons que votre demande de consultation pour le service <strong>${appointment.service}</strong> a été <strong>reportée</strong>.</p>
-            <p><strong>Détails de votre demande :</strong></p>
-            <ul>
-              <li><strong>Nom :</strong> ${appointment.fullName}</li>
-              <li><strong>Email :</strong> ${appointment.email}</li>
-              <li><strong>Téléphone :</strong> ${appointment.phone || 'Non fourni'}</li>
-              <li><strong>Service demandé :</strong> ${appointment.service}</li>
-              <li><strong>Message :</strong> ${appointment.message || 'Aucun message'}</li>
-              <li><strong>Date de la demande :</strong> ${new Date(appointment.createdAt).toLocaleString()}</li>
-            </ul>
-            <p>Notre équipe vous contactera dès que possible pour reprogrammer la consultation.</p>
-            <p>Si vous avez des questions, n'hésitez pas à nous contacter.</p>
-            <p>Cordialement,<br>L'équipe ATB Ltd</p>
-          `;
-          break;
-
-        default:
-          // No email for other statuses like 'pending'
-          break;
+      
+      if (emailResult.success) {
+        console.log('Confirmation email sent successfully');
+      } else {
+        console.log('Email not sent:', emailResult.reason || emailResult.error);
       }
 
-      if (subject && html) {
-        await transporter.sendMail({
-          from: process.env.EMAIL_USER,
-          to: appointment.email,
-          subject,
-          html,
-        });
+      return successResponse(res, appointment, 'Appointment request submitted successfully', 201);
+    } catch (error) {
+      console.error('Create appointment error:', error);
+      return errorResponse(res, 'Failed to create appointment', 500);
+    }
+  },
+
+  // Update appointment
+  updateAppointment: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+
+      const appointment = await prisma.appointment.update({
+        where: { id: parseInt(id) },
+        data: {
+          ...updateData,
+          updatedAt: new Date()
+        }
+      });
+
+      return successResponse(res, appointment, 'Appointment updated successfully');
+    } catch (error) {
+      console.error('Update appointment error:', error);
+      return errorResponse(res, 'Failed to update appointment', 500);
+    }
+  },
+
+  // Delete appointment
+  deleteAppointment: async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      await prisma.appointment.delete({
+        where: { id: parseInt(id) }
+      });
+
+      return successResponse(res, null, 'Appointment deleted successfully');
+    } catch (error) {
+      console.error('Delete appointment error:', error);
+      return errorResponse(res, 'Failed to delete appointment', 500);
+    }
+  },
+
+  // Accept appointment
+  acceptAppointment: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { scheduledDate, scheduledTime, message } = req.body;
+
+      let scheduledAt = null;
+      if (scheduledDate && scheduledTime) {
+        scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`);
       }
-    } catch (emailError) {
-      console.error('Status update email sending error:', emailError);
-      // Don't fail the appointment update if email fails
-    }
 
-    sendSuccess(res, 'Appointment updated successfully', appointment);
-  } catch (error) {
-    console.error('Update appointment error:', error);
-    sendError(res, 500, 'Server error');
+      const appointment = await prisma.appointment.update({
+        where: { id: parseInt(id) },
+        data: {
+          status: 'accepted',
+          scheduledAt,
+          adminNotes: message,
+          updatedAt: new Date()
+        }
+      });
+
+      // Send acceptance email
+      const emailResult = await emailService.sendAppointmentAccepted({
+        fullName: appointment.fullName,
+        email: appointment.email,
+        service: appointment.service,
+        scheduledDate,
+        scheduledTime,
+        message
+      });
+      
+      if (emailResult.success) {
+        console.log('Acceptance email sent successfully');
+      } else {
+        console.log('Email not sent:', emailResult.reason || emailResult.error);
+      }
+
+      return successResponse(res, appointment, 'Appointment accepted successfully');
+    } catch (error) {
+      console.error('Accept appointment error:', error);
+      return errorResponse(res, 'Failed to accept appointment', 500);
+    }
+  },
+
+  // Decline appointment
+  declineAppointment: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      const appointment = await prisma.appointment.update({
+        where: { id: parseInt(id) },
+        data: {
+          status: 'declined',
+          adminNotes: reason,
+          updatedAt: new Date()
+        }
+      });
+
+      // Create notification
+      await prisma.notification.create({
+        data: {
+          type: 'appointment',
+          title: 'Appointment Declined',
+          message: `Appointment for ${appointment.fullName} has been declined`,
+          relatedId: appointment.id
+        }
+      });
+
+      return successResponse(res, appointment, 'Appointment declined successfully');
+    } catch (error) {
+      console.error('Decline appointment error:', error);
+      return errorResponse(res, 'Failed to decline appointment', 500);
+    }
+  },
+
+  // Postpone appointment
+  postponeAppointment: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { newDate, newTime } = req.body;
+
+      let scheduledAt = null;
+      if (newDate && newTime) {
+        scheduledAt = new Date(`${newDate}T${newTime}`);
+      }
+
+      const appointment = await prisma.appointment.update({
+        where: { id: parseInt(id) },
+        data: {
+          status: 'postponed',
+          scheduledAt,
+          updatedAt: new Date()
+        }
+      });
+
+      // Create notification
+      await prisma.notification.create({
+        data: {
+          type: 'appointment',
+          title: 'Appointment Postponed',
+          message: `Appointment for ${appointment.fullName} has been postponed`,
+          relatedId: appointment.id
+        }
+      });
+
+      return successResponse(res, appointment, 'Appointment postponed successfully');
+    } catch (error) {
+      console.error('Postpone appointment error:', error);
+      return errorResponse(res, 'Failed to postpone appointment', 500);
+    }
   }
 };
 
-const deleteAppointment = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const existingAppointment = await prisma.appointment.findUnique({
-      where: { id: parseInt(id) },
-    });
-
-    if (!existingAppointment) {
-      return sendError(res, 404, 'Appointment not found');
-    }
-
-    await prisma.appointment.delete({
-      where: { id: parseInt(id) },
-    });
-
-    sendSuccess(res, 'Appointment deleted successfully');
-  } catch (error) {
-    console.error('Delete appointment error:', error);
-    sendError(res, 500, 'Server error');
-  }
-};
-
-module.exports = {
-  getAppointments,
-  getAppointment,
-  createAppointment,
-  updateAppointment,
-  deleteAppointment,
-};
+module.exports = appointmentController;

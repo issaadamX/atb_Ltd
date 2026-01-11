@@ -28,8 +28,18 @@ const sendSuccess = (res, message = 'Success', data = null, statusCode = 200) =>
   return sendResponse(res, statusCode, message, data);
 };
 
+const successResponse = (res, data = null, message = 'Success', statusCode = 200) => {
+  return sendResponse(res, statusCode, message, data);
+};
+
+const errorResponse = (res, message = 'Internal server error', statusCode = 500, errors = null) => {
+  return sendError(res, statusCode, message, errors);
+};
+
 module.exports = {
   sendResponse,
   sendError,
   sendSuccess,
+  successResponse,
+  errorResponse,
 };
